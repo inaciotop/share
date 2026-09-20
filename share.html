@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ShareRide Pro - Carona e Viagem Compartilhada</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            500: '#10b981',
+                            600: '#059669',
+                            700: '#047857',
+                        },
+                        electric: {
+                            400: '#38bdf8',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                        },
+                        indigoBrand: {
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+    <!-- Google Fonts Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <style>
+        * {
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(100, 116, 139, 0.5);
+            border-radius: 999px;
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.90);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .light .glass-panel {
+            background: rgba(255, 255, 255, 0.94);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .leaflet-container {
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            background-color: #0b0f19;
+        }
+
+        .car-chassis {
+            position: relative;
+            background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+            border: 2px solid #334155;
+            border-radius: 32px 32px 24px 24px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), inset 0 0 15px rgba(56, 189, 248, 0.1);
+        }
+        .light .car-chassis {
+            background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
+            border-color: #cbd5e1;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        .car-windshield-front {
+            height: 10px;
+            background: rgba(56, 189, 248, 0.3);
+            border-radius: 12px 12px 4px 4px;
+            border: 1px solid rgba(56, 189, 248, 0.5);
+        }
+
+        .seat-btn {
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .car-marker-icon {
+            transition: transform 0.2s linear;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-950 text-slate-100 antialiased overflow-hidden h-screen w-screen flex flex-col transition-colors duration-300 light:bg-slate-100 light:text-slate-900">
+
+    <header class="h-16 bg-slate-900/90 border-b border-slate-800 px-4 flex items-center justify-between z-30 relative backdrop-blur-md light:bg-white light:border-slate-200">
+        <!-- Logo & Title -->
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-electric-600 via-brand-500 to-indigoBrand-600 flex items-center justify-center shadow-lg shadow-electric-500/20">
+                <i class="fa-solid fa-car-side text-white text-lg"></i>
+            </div>
+            <div>
+                <h1 class="text-base sm:text-lg font-black tracking-tight bg-gradient-to-r from-white via-slate-100 to-electric-400 bg-clip-text text-transparent light:from-slate-900 light:to-electric-600 flex items-center gap-1.5">
+                    Share<span class="text-electric-400">Ride</span> <span class="bg-electric-500/20 text-electric-400 border border-electric-500/30 text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase">PRO</span>
+                </h1>
+                <p class="text-[10px] font-extrabold uppercase tracking-wider text-emerald-400 light:text-emerald-600 flex items-center gap-1">
+                    <i class="fa-solid fa-leaf text-[9px]"></i> Viagens Sustentáveis
+                </p>
+            </div>
+        </div>
+
+        <!-- Controls & Role Selector -->
+        <div class="flex items-center space-x-2 sm:space-x-3">
+            <div class="hidden lg:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold">
+                <i class="fa-solid fa-seedling"></i>
+                <span>-3.2 kg CO₂ Evitados</span>
+            </div>
+
+            <!-- Role Selector Tabs -->
+            <div class="bg-slate-800/90 p-1 rounded-2xl flex border border-slate-700/80 light:bg-slate-200 light:border-slate-300">
+                <button id="btnRolePassenger" onclick="switchRole('passenger')" class="px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center space-x-1.5 bg-electric-600 text-white shadow-md">
+                    <i class="fa-solid fa-user"></i>
+                    <span>Passageiro</span>
+                </button>
+                <button id="btnRoleDriver" onclick="switchRole('driver')" class="px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center space-x-1.5 text-slate-400 hover:text-white light:text-slate-600">
+                    <i class="fa-solid fa-id-card"></i>
+                    <span>Motorista</span>
+                </button>
+            </div>
+
+            <!-- Theme Toggle -->
+            <button onclick="toggleTheme()" class="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 hover:text-white transition-colors light:bg-slate-200 light:border-slate-300 light:text-slate-700">
+                <i id="themeIcon" class="fa-solid fa-moon text-sm"></i>
+            </button>
+
+            <!-- History Button -->
+            <button onclick="openHistoryModal()" class="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 hover:text-white transition-colors light:bg-slate-200 light:border-slate-300 light:text-slate-700 relative">
+                <i class="fa-solid fa-clock-rotate-left text-sm"></i>
+                <span id="historyBadge" class="hidden absolute -top-1 -right-1 w-4 h-4 bg-brand-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">0</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="relative flex-1 w-full h-[calc(100vh-64px)] overflow-hidden">
+        <!-- Leaflet Map Container -->
+        <div id="map" class="w-full h-full"></div>
+
+        <!-- Mode Indicator Banner on Map -->
+        <div class="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center space-x-3 bg-slate-900/90 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-slate-700/80 shadow-2xl light:bg-white/90 light:border-slate-300">
+            <div id="modeStatusDot" class="w-3 h-3 rounded-full bg-electric-400 animate-pulse"></div>
+            <span class="text-xs font-black text-slate-200 light:text-slate-800 uppercase tracking-wide">Modalidade:</span>
+            <span id="modeStatusTag" class="text-xs font-black text-electric-400 bg-electric-500/10 px-2.5 py-0.5 rounded-lg border border-electric-500/30">
+                EXCLUSIVO (Viagem Privada)
+            </span>
+        </div>
+
+        <aside id="passengerPanel" class="absolute top-16 bottom-4 left-4 z-20 w-[92vw] max-w-[440px] glass-panel rounded-3xl p-5 shadow-2xl flex flex-col justify-between overflow-y-auto space-y-4">
+            <div class="space-y-4">
+                <!-- Location Inputs -->
+                <div class="space-y-2">
+                    <label class="text-[11px] font-black uppercase tracking-wider text-slate-400">Seu Percurso</label>
+                    <div class="bg-slate-900/80 p-3 rounded-2xl border border-slate-800 space-y-2.5 light:bg-slate-100 light:border-slate-200">
+                        <div class="flex items-center space-x-2.5">
+                            <i class="fa-solid fa-location-dot text-brand-500 text-sm"></i>
+                            <input type="text" id="inputOrigin" value="Av. Paulista, 1500 (MASP)" class="w-full bg-transparent text-xs font-bold text-slate-100 focus:outline-none light:text-slate-900">
+                        </div>
+                        <div class="border-t border-slate-800/80 light:border-slate-200"></div>
+                        <div class="flex items-center space-x-2.5">
+                            <i class="fa-solid fa-flag-checkered text-rose-500 text-sm"></i>
+                            <input type="text" id="inputDestination" value="Aeroporto de Congonhas (CGH)" class="w-full bg-transparent text-xs font-bold text-slate-100 focus:outline-none light:text-slate-900">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 1. Ride Mode Selector Cards -->
+                <div class="space-y-2">
+                    <label class="text-[11px] font-black uppercase tracking-wider text-slate-400">1. Escolha a Modalidade</label>
+                    <div class="grid grid-cols-2 gap-2.5">
+                        <div id="cardModeExclusive" onclick="selectRideMode('exclusive')" class="p-3.5 rounded-2xl border-2 transition-all cursor-pointer bg-electric-500/10 border-electric-500 text-slate-100 relative">
+                            <span class="absolute top-2 right-2 text-[10px] font-extrabold bg-electric-500 text-white px-1.5 py-0.5 rounded-md">Direto</span>
+                            <div class="w-8 h-8 rounded-xl bg-electric-500/20 text-electric-400 flex items-center justify-center text-sm mb-2">
+                                <i class="fa-solid fa-user-shield"></i>
+                            </div>
+                            <h3 class="text-xs font-black">Exclusivo</h3>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Sem paradas extras.</p>
+                        </div>
+
+                        <div id="cardModeShared" onclick="selectRideMode('shared')" class="p-3.5 rounded-2xl border-2 transition-all cursor-pointer bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 light:bg-slate-100 light:border-slate-200">
+                            <span class="absolute top-2 right-2 text-[10px] font-extrabold bg-brand-500 text-white px-1.5 py-0.5 rounded-md">-50% OFF</span>
+                            <div class="w-8 h-8 rounded-xl bg-brand-500/20 text-brand-400 flex items-center justify-center text-sm mb-2">
+                                <i class="fa-solid fa-users"></i>
+                            </div>
+                            <h3 class="text-xs font-black text-slate-200 light:text-slate-800">Compartilhado</h3>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Divida com caronas.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Seat / Companion Selector (When Shared is active) -->
+                <div id="seatSelectorContainer" class="space-y-2 hidden">
+                    <div class="flex justify-between items-center">
+                        <label class="text-[11px] font-black uppercase tracking-wider text-slate-400">2. Quantos Assentos Precisa?</label>
+                        <span class="text-[10px] font-bold text-brand-400">Companheiros de Viagem</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button onclick="selectSeatCount(1)" id="btnSeat1" class="seat-count-btn py-2.5 rounded-xl border-2 text-xs font-extrabold bg-brand-600 border-brand-500 text-white flex flex-col items-center gap-0.5">
+                            <i class="fa-solid fa-user"></i>
+                            <span>1 Assento</span>
+                            <span class="text-[9px] font-normal opacity-90">Só Você</span>
+                        </button>
+                        <button onclick="selectSeatCount(2)" id="btnSeat2" class="seat-count-btn py-2.5 rounded-xl border-2 text-xs font-extrabold bg-slate-900/80 border-slate-800 text-slate-300 light:bg-slate-100 light:border-slate-200 light:text-slate-800 flex flex-col items-center gap-0.5">
+                            <i class="fa-solid fa-user-group"></i>
+                            <span>2 Assentos</span>
+                            <span class="text-[9px] font-normal text-slate-400">+1 Amigo</span>
+                        </button>
+                        <button onclick="selectSeatCount(3)" id="btnSeat3" class="seat-count-btn py-2.5 rounded-xl border-2 text-xs font-extrabold bg-slate-900/80 border-slate-800 text-slate-300 light:bg-slate-100 light:border-slate-200 light:text-slate-800 flex flex-col items-center gap-0.5">
+                            <i class="fa-solid fa-users"></i>
+                            <span>3 Assentos</span>
+                            <span class="text-[9px] font-normal text-slate-400">+2 Amigos</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label class="text-[11px] font-black uppercase tracking-wider text-slate-400">Ocupação do Veículo</label>
+                        <span id="seatDiagramLegend" class="text-[10px] font-bold text-electric-400">3 Assentos Reservados</span>
+                    </div>
+
+                    <div class="car-chassis p-4 space-y-3">
+                        <div class="car-windshield-front w-3/4 mx-auto mb-1"></div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <!-- Driver Seat -->
+                            <div class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700 text-center space-y-1 light:bg-slate-300 light:border-slate-400">
+                                <i class="fa-solid fa-steering-wheel text-xs text-amber-400"></i>
+                                <p class="text-[10px] font-black text-slate-200 light:text-slate-900">Motorista</p>
+                                <span class="inline-block text-[8px] font-bold bg-amber-500/20 text-amber-400 px-1.5 py-0.2 rounded">Reservado</span>
+                            </div>
+
+                            <!-- Front Passenger Seat -->
+                            <div id="seatVisual_frontRight" class="seat-btn p-2.5 rounded-2xl border text-center space-y-1 bg-electric-500/20 border-electric-500 text-electric-400">
+                                <i id="icon_frontRight" class="fa-solid fa-user text-xs"></i>
+                                <p class="text-[10px] font-black">Frente Dir.</p>
+                                <span id="tag_frontRight" class="inline-block text-[8px] font-bold bg-electric-500/30 text-white px-1.5 py-0.2 rounded">Você</span>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3 pt-1">
+                            <!-- Back Left Seat -->
+                            <div id="seatVisual_backLeft" class="seat-btn p-2.5 rounded-2xl border text-center space-y-1 bg-electric-500/20 border-electric-500 text-electric-400">
+                                <i id="icon_backLeft" class="fa-solid fa-user text-xs"></i>
+                                <p class="text-[10px] font-black">Trás Esq.</p>
+                                <span id="tag_backLeft" class="inline-block text-[8px] font-bold bg-electric-500/30 text-white px-1.5 py-0.2 rounded">Você</span>
+                            </div>
+
+                            <!-- Back Right Seat -->
+                            <div id="seatVisual_backRight" class="seat-btn p-2.5 rounded-2xl border text-center space-y-1 bg-electric-500/20 border-electric-500 text-electric-400">
+                                <i id="icon_backRight" class="fa-solid fa-user text-xs"></i>
+                                <p class="text-[10px] font-black">Trás Dir.</p>
+                                <span id="tag_backRight" class="inline-block text-[8px] font-bold bg-electric-500/30 text-white px-1.5 py-0.2 rounded">Você</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Price Summary Box -->
+                <div class="bg-slate-900/90 p-4 rounded-2xl border border-slate-800 space-y-2 light:bg-slate-100 light:border-slate-200">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="font-bold text-slate-300 light:text-slate-700">Resumo da Tarifa</span>
+                        <span id="pricingDiscountPill" class="text-[10px] font-black text-electric-400 bg-electric-500/20 px-2 py-0.5 rounded-full border border-electric-500/30">
+                            TARIFA EXCLUSIVA
+                        </span>
+                    </div>
+                    <div class="flex items-baseline justify-between pt-1">
+                        <div>
+                            <p class="text-[10px] text-slate-400">Valor Total Estimado</p>
+                            <p id="totalPriceText" class="text-xl font-black text-electric-400">R$ 38,00</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-[10px] text-slate-400">Custo por Pessoa</p>
+                            <p id="perPersonPriceText" class="text-sm font-bold text-slate-200 light:text-slate-800">R$ 38,00 / pessoa</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Request Button -->
+            <button onclick="requestRideAction()" id="btnRequestRide" class="w-full py-4 rounded-2xl bg-gradient-to-r from-electric-600 via-brand-600 to-indigoBrand-600 hover:from-electric-500 hover:to-indigoBrand-500 text-white font-black text-sm shadow-xl shadow-electric-500/25 transition-all transform active:scale-95 flex items-center justify-center space-x-2">
+                <i class="fa-solid fa-paper-plane"></i>
+                <span>Solicitar Corrida Exclusiva</span>
+            </button>
+        </aside>
+
+        <aside id="driverPanel" class="hidden absolute top-16 bottom-4 left-4 z-20 w-[92vw] max-w-[440px] glass-panel rounded-3xl p-5 shadow-2xl flex-col justify-between overflow-y-auto space-y-4">
+            <div class="space-y-4">
+                <!-- Driver Info Banner -->
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3 light:border-slate-200">
+                    <div class="flex items-center space-x-3">
+                        <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80" class="w-11 h-11 rounded-full object-cover ring-2 ring-electric-400">
+                        <div>
+                            <h3 class="text-sm font-black text-white light:text-slate-900">Ricardo Santos</h3>
+                            <p class="text-xs text-slate-400">Honda Civic • <span class="text-amber-400 font-bold"><i class="fa-solid fa-star"></i> 4.98</span></p>
+                        </div>
+                    </div>
+                    <button onclick="openChatModal()" class="relative p-2.5 rounded-xl bg-indigoBrand-600 hover:bg-indigoBrand-500 text-white shadow-lg transition-transform active:scale-95">
+                        <i class="fa-solid fa-comments text-sm"></i>
+                    </button>
+                </div>
+
+                <!-- Accepted Trip Card -->
+                <div class="bg-slate-900/90 p-4 rounded-2xl border border-slate-800 space-y-3 light:bg-slate-100 light:border-slate-200">
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs font-black uppercase tracking-wider text-slate-400">Chamada Aceita</span>
+                        <span id="driverOrderModeBadge" class="text-[10px] font-black px-2.5 py-1 rounded-full bg-electric-500/20 text-electric-400 border border-electric-500/30">
+                            MODO EXCLUSIVO
+                        </span>
+                    </div>
+
+                    <div class="space-y-2 text-xs text-slate-200 light:text-slate-800">
+                        <p class="truncate"><i class="fa-solid fa-circle text-[8px] text-brand-500 mr-2"></i><strong>Origem:</strong> <span id="driverOriginText">Av. Paulista, 1500</span></p>
+                        <p class="truncate"><i class="fa-solid fa-flag-checkered text-[10px] text-rose-500 mr-2"></i><strong>Destino:</strong> <span id="driverDestText">Aeroporto de Congonhas</span></p>
+                    </div>
+
+                    <div class="pt-2 border-t border-slate-800/80 light:border-slate-200">
+                        <p class="text-[10px] font-bold text-slate-400 uppercase mb-2">Ordem de Paradas / Embarques:</p>
+                        <div id="driverStopsList" class="space-y-1.5 text-xs"></div>
+                    </div>
+                </div>
+
+                <!-- Speed Control Pills -->
+                <div class="bg-slate-900/90 p-3 rounded-2xl border border-slate-800 space-y-2 light:bg-slate-100 light:border-slate-200">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="font-bold text-slate-300 light:text-slate-700">Controle da Simulação</span>
+                        <span class="text-[10px] text-slate-400">Velocidade do Veículo</span>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button onclick="setSimulationSpeed(1)" class="speed-pill flex-1 py-1.5 rounded-xl bg-electric-600 text-white text-xs font-black">1x</button>
+                        <button onclick="setSimulationSpeed(2)" class="speed-pill flex-1 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold light:bg-slate-200 light:text-slate-700">2x</button>
+                        <button onclick="setSimulationSpeed(5)" class="speed-pill flex-1 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold light:bg-slate-200 light:text-slate-700">5x</button>
+                    </div>
+                </div>
+            </div>
+
+            <button id="btnDriverStart" onclick="toggleTripSimulation()" class="w-full py-4 rounded-2xl bg-gradient-to-r from-brand-600 via-emerald-600 to-electric-600 hover:from-brand-500 hover:to-electric-500 text-white font-black text-sm shadow-xl transition-all transform active:scale-95 flex items-center justify-center space-x-2">
+                <i class="fa-solid fa-play"></i>
+                <span>Iniciar Trajeto da Corrida</span>
+            </button>
+        </aside>
+    </main>
+
+    <!-- Chat Modal -->
+    <div id="chatModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm">
+        <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl flex flex-col h-[500px] overflow-hidden light:bg-white light:border-slate-200">
+            <div class="p-4 bg-slate-800/90 border-b border-slate-700 flex items-center justify-between light:bg-slate-100 light:border-slate-200">
+                <div class="flex items-center space-x-3">
+                    <div class="w-9 h-9 rounded-full bg-electric-500/20 text-electric-400 flex items-center justify-center">
+                        <i class="fa-solid fa-comments"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-white light:text-slate-900">Chat do Veículo</h3>
+                        <p class="text-[10px] text-emerald-400">Comunicação ao vivo</p>
+                    </div>
+                </div>
+                <button onclick="closeChatModal()" class="w-8 h-8 rounded-full bg-slate-700/50 text-slate-300 flex items-center justify-center hover:text-white light:bg-slate-200 light:text-slate-700">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div id="chatMessagesStream" class="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-950/40 light:bg-slate-50"></div>
+            <form onsubmit="sendChatMessage(event)" class="p-3 bg-slate-900 border-t border-slate-800 flex space-x-2 light:bg-white light:border-slate-200">
+                <input type="text" id="chatInput" placeholder="Mensagem para a carona..." class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none light:bg-slate-100 light:text-slate-800 light:border-slate-300">
+                <button type="submit" class="w-9 h-9 rounded-xl bg-electric-600 text-white flex items-center justify-center shadow-md">
+                    <i class="fa-solid fa-paper-plane text-xs"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Receipt Modal -->
+    <div id="receiptModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+        <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl text-center space-y-5 light:bg-white light:border-slate-200">
+            <div class="w-16 h-16 rounded-full bg-brand-500/20 text-brand-400 border-2 border-brand-500 flex items-center justify-center mx-auto text-2xl animate-bounce">
+                <i class="fa-solid fa-circle-check"></i>
+            </div>
+            <div>
+                <h3 class="text-xl font-black text-white light:text-slate-900">Corrida Concluída!</h3>
+                <p class="text-xs text-slate-400 mt-1">Obrigado por usar o ShareRide Pro</p>
+            </div>
+            <div class="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 text-left space-y-2 light:bg-slate-50 light:border-slate-200">
+                <div class="flex justify-between text-xs text-slate-400">
+                    <span>Modalidade Escolhida:</span>
+                    <span id="recModeText" class="text-electric-400 font-bold">Exclusivo</span>
+                </div>
+                <div class="flex justify-between text-xs text-slate-400">
+                    <span>Assentos Reservados:</span>
+                    <span id="recSeatsText" class="text-slate-200 font-bold light:text-slate-800">3 Lugares</span>
+                </div>
+                <div class="flex justify-between text-xs text-slate-400">
+                    <span>Desconto de Compartilhamento:</span>
+                    <span id="recDiscountText" class="text-emerald-400 font-bold">R$ 0,00</span>
+                </div>
+                <div class="border-t border-slate-800 pt-2 flex justify-between text-sm font-black light:border-slate-200">
+                    <span class="text-white light:text-slate-900">Valor Total Pago:</span>
+                    <span id="recTotalText" class="text-brand-400">R$ 38,00</span>
+                </div>
+            </div>
+            <button onclick="saveAndCloseReceipt()" class="w-full py-3.5 rounded-2xl bg-brand-600 hover:bg-brand-500 text-white font-black text-sm shadow-lg transition-transform active:scale-95">
+                Salvar no Histórico e Concluir
+            </button>
+        </div>
+    </div>
+
+    <!-- History Modal -->
+    <div id="historyModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm">
+        <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl flex flex-col max-h-[80vh] overflow-hidden light:bg-white light:border-slate-200">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3 light:border-slate-200">
+                <h3 class="text-base font-bold text-white flex items-center gap-2 light:text-slate-900">
+                    <i class="fa-solid fa-clock-rotate-left text-electric-400"></i> Histórico de Corridas
+                </h3>
+                <button onclick="closeHistoryModal()" class="w-8 h-8 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center hover:text-white light:bg-slate-200 light:text-slate-700">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div id="historyItemsContainer" class="flex-1 overflow-y-auto py-3 space-y-3"></div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toastContainer" class="fixed bottom-5 left-5 z-50 space-y-2 pointer-events-none"></div>
+
+    <script>
+        const SoundFX = {
+            ctx: null,
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            },
+            playChime(type) {
+                try {
+                    this.init();
+                    if (!this.ctx) return;
+                    const now = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    if (type === 'select') {
+                        osc.frequency.setValueAtTime(523.25, now);
+                        osc.frequency.setValueAtTime(659.25, now + 0.08);
+                        gain.gain.setValueAtTime(0.15, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+                        osc.start(now);
+                        osc.stop(now + 0.25);
+                    } else if (type === 'finish') {
+                        osc.frequency.setValueAtTime(440, now);
+                        osc.frequency.setValueAtTime(880, now + 0.15);
+                        gain.gain.setValueAtTime(0.2, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                        osc.start(now);
+                        osc.stop(now + 0.4);
+                    }
+                } catch(e) {}
+            }
+        };
+
+        let map;
+        let carMarker, routePolyline, stopMarkers = [];
+        let currentRole = 'passenger';
+        let rideMode = 'exclusive';
+        let selectedSeatsCount = 1;
+        let isSimulationRunning = false;
+        let simSpeed = 1;
+        let animFrameId = null;
+        let currentWaypointIndex = 0;
+
+        const LOCATION_POINTS = {
+            origin: { lat: -23.5615, lng: -46.6559, name: 'Av. Paulista, 1500 (MASP)' },
+            destination: { lat: -23.6261, lng: -46.6564, name: 'Aeroporto de Congonhas (CGH)' },
+            sharedPickup1: { lat: -23.5820, lng: -46.6620, name: 'Vila Mariana (Embarque Ana)' },
+            sharedDropoff1: { lat: -23.6050, lng: -46.6600, name: 'Moema (Desembarque Ana)' }
+        };
+
+        let activeWaypoints = [];
+        let chatMessages = [
+            { sender: 'Motorista (Ricardo)', text: 'Olá! Estou a caminho do ponto de embarque.' }
+        ];
+
+        window.onload = function() {
+            initMap();
+            updateModeAndSeatUI();
+            updateHistoryBadge();
+        };
+
+        function initMap() {
+            map = L.map('map', { zoomControl: false }).setView([LOCATION_POINTS.origin.lat, LOCATION_POINTS.origin.lng], 13);
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap &copy; CARTO',
+                maxZoom: 19
+            }).addTo(map);
+
+            L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+            buildRouteWaypoints();
+            renderMapLayers();
+        }
+
+        function buildRouteWaypoints() {
+            activeWaypoints = [];
+            let routeStops = [];
+
+            if (rideMode === 'exclusive') {
+                routeStops = [
+                    { label: 'Origem', lat: LOCATION_POINTS.origin.lat, lng: LOCATION_POINTS.origin.lng, type: 'start' },
+                    { label: 'Destino', lat: LOCATION_POINTS.destination.lat, lng: LOCATION_POINTS.destination.lng, type: 'end' }
+                ];
+            } else {
+                routeStops = [
+                    { label: 'Sua Origem', lat: LOCATION_POINTS.origin.lat, lng: LOCATION_POINTS.origin.lng, type: 'start' },
+                    { label: 'Parada 1: Embarque Ana (Vila Mariana)', lat: LOCATION_POINTS.sharedPickup1.lat, lng: LOCATION_POINTS.sharedPickup1.lng, type: 'stop' },
+                    { label: 'Parada 2: Desembarque Ana (Moema)', lat: LOCATION_POINTS.sharedDropoff1.lat, lng: LOCATION_POINTS.sharedDropoff1.lng, type: 'stop' },
+                    { label: 'Seu Destino Final', lat: LOCATION_POINTS.destination.lat, lng: LOCATION_POINTS.destination.lng, type: 'end' }
+                ];
+            }
+
+            for (let i = 0; i < routeStops.length - 1; i++) {
+                const pA = routeStops[i];
+                const pB = routeStops[i + 1];
+                const steps = 40;
+
+                for (let s = 0; s <= steps; s++) {
+                    const t = s / steps;
+                    const lat = pA.lat + (pB.lat - pA.lat) * t;
+                    const lng = pA.lng + (pB.lng - pA.lng) * t;
+                    activeWaypoints.push({ lat, lng, stopEvent: (s === steps) ? pB : null });
+                }
+            }
+        }
+
+        function renderMapLayers() {
+            stopMarkers.forEach(m => map.removeLayer(m));
+            stopMarkers = [];
+            if (routePolyline) map.removeLayer(routePolyline);
+            if (carMarker) map.removeLayer(carMarker);
+
+            const pathCoords = activeWaypoints.map(w => [w.lat, w.lng]);
+
+            routePolyline = L.polyline(pathCoords, {
+                color: rideMode === 'exclusive' ? '#0ea5e9' : '#10b981',
+                weight: 6,
+                opacity: 0.85,
+                dashArray: rideMode === 'shared' ? '6, 6' : null
+            }).addTo(map);
+
+            map.fitBounds(routePolyline.getBounds(), { padding: [50, 50] });
+
+            if (rideMode === 'exclusive') {
+                const pStart = L.marker([LOCATION_POINTS.origin.lat, LOCATION_POINTS.origin.lng]).bindPopup("<b>Origem</b>").addTo(map);
+                const pEnd = L.marker([LOCATION_POINTS.destination.lat, LOCATION_POINTS.destination.lng]).bindPopup("<b>Destino</b>").addTo(map);
+                stopMarkers.push(pStart, pEnd);
+            } else {
+                const startPin = L.marker([LOCATION_POINTS.origin.lat, LOCATION_POINTS.origin.lng]).bindPopup("<b>Embarque Principal</b>").addTo(map);
+                const p1Pin = L.marker([LOCATION_POINTS.sharedPickup1.lat, LOCATION_POINTS.sharedPickup1.lng]).bindPopup("<b>Parada 1: Embarque Ana</b>").addTo(map);
+                const p2Pin = L.marker([LOCATION_POINTS.sharedDropoff1.lat, LOCATION_POINTS.sharedDropoff1.lng]).bindPopup("<b>Parada 2: Desembarque Ana</b>").addTo(map);
+                const endPin = L.marker([LOCATION_POINTS.destination.lat, LOCATION_POINTS.destination.lng]).bindPopup("<b>Destino Final</b>").addTo(map);
+                stopMarkers.push(startPin, p1Pin, p2Pin, endPin);
+            }
+
+            const carIcon = L.divIcon({
+                className: 'car-marker-icon',
+                html: `<div class="relative w-10 h-10 rounded-full bg-slate-900 border-2 ${rideMode === 'exclusive' ? 'border-electric-400' : 'border-brand-500'} shadow-2xl flex items-center justify-center text-white text-base">
+                        <i class="fa-solid fa-car"></i>
+                       </div>`,
+                iconSize: [40, 40],
+                iconAnchor: [20, 20]
+            });
+
+            const startPt = activeWaypoints[0];
+            carMarker = L.marker([startPt.lat, startPt.lng], { icon: carIcon }).addTo(map);
+
+            updateDriverStopsUI();
+        }
+
+        function selectRideMode(mode) {
+            rideMode = mode;
+            SoundFX.playChime('select');
+
+            const cardEx = document.getElementById('cardModeExclusive');
+            const cardSh = document.getElementById('cardModeShared');
+            const seatContainer = document.getElementById('seatSelectorContainer');
+
+            if (mode === 'exclusive') {
+                cardEx.className = "p-3.5 rounded-2xl border-2 transition-all cursor-pointer bg-electric-500/10 border-electric-500 text-slate-100 relative";
+                cardSh.className = "p-3.5 rounded-2xl border-2 transition-all cursor-pointer bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 light:bg-slate-100 light:border-slate-200";
+                seatContainer.classList.add('hidden');
+                selectedSeatsCount = 3;
+            } else {
+                cardSh.className = "p-3.5 rounded-2xl border-2 transition-all cursor-pointer bg-brand-500/10 border-brand-500 text-slate-100 relative";
+                cardEx.className = "p-3.5 rounded-2xl border-2 transition-all cursor-pointer bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 light:bg-slate-100 light:border-slate-200";
+                seatContainer.classList.remove('hidden');
+                selectedSeatsCount = 1;
+                selectSeatCount(1);
+            }
+
+            updateModeAndSeatUI();
+            buildRouteWaypoints();
+            renderMapLayers();
+        }
+
+        function selectSeatCount(count) {
+            selectedSeatsCount = count;
+            SoundFX.playChime('select');
+
+            document.querySelectorAll('.seat-count-btn').forEach(btn => {
+                btn.classList.remove('bg-brand-600', 'border-brand-500', 'text-white');
+                btn.classList.add('bg-slate-900/80', 'border-slate-800', 'text-slate-300', 'light:bg-slate-100', 'light:border-slate-200', 'light:text-slate-800');
+            });
+
+            const activeBtn = document.getElementById(`btnSeat${count}`);
+            if (activeBtn) {
+                activeBtn.classList.remove('bg-slate-900/80', 'border-slate-800', 'text-slate-300');
+                activeBtn.classList.add('bg-brand-600', 'border-brand-500', 'text-white');
+            }
+
+            updateModeAndSeatUI();
+        }
+
+        function updateModeAndSeatUI() {
+            const statusDot = document.getElementById('modeStatusDot');
+            const statusTag = document.getElementById('modeStatusTag');
+            const btnRequest = document.getElementById('btnRequestRide');
+
+            if (rideMode === 'exclusive') {
+                statusDot.className = "w-3 h-3 rounded-full bg-electric-400 animate-pulse";
+                statusTag.className = "text-xs font-black text-electric-400 bg-electric-500/10 px-2.5 py-0.5 rounded-lg border border-electric-500/30";
+                statusTag.innerText = "EXCLUSIVO (Viagem Privada)";
+                btnRequest.innerHTML = `<i class="fa-solid fa-paper-plane"></i> <span>Solicitar Corrida Exclusiva</span>`;
+            } else {
+                statusDot.className = "w-3 h-3 rounded-full bg-brand-400 animate-pulse";
+                statusTag.className = "text-xs font-black text-brand-400 bg-brand-500/10 px-2.5 py-0.5 rounded-lg border border-brand-500/30";
+                statusTag.innerText = "COMPARTILHADO (Ride Share)";
+                btnRequest.innerHTML = `<i class="fa-solid fa-users font-bold"></i> <span>Solicitar Carona Compartilhada (${selectedSeatsCount} Assento)</span>`;
+            }
+
+            const vFrontRight = document.getElementById('seatVisual_frontRight');
+            const vBackLeft = document.getElementById('seatVisual_backLeft');
+            const vBackRight = document.getElementById('seatVisual_backRight');
+
+            const tagFR = document.getElementById('tag_frontRight');
+            const tagBL = document.getElementById('tag_backLeft');
+            const tagBR = document.getElementById('tag_backRight');
+
+            if (rideMode === 'exclusive') {
+                [vFrontRight, vBackLeft, vBackRight].forEach(el => {
+                    el.className = "seat-btn p-2.5 rounded-2xl border text-center space-y-1 bg-electric-500/20 border-electric-500 text-electric-400";
+                });
+                tagFR.innerText = "Sua Reserva";
+                tagBL.innerText = "Sua Reserva";
+                tagBR.innerText = "Sua Reserva";
+                document.getElementById('seatDiagramLegend').innerText = "Veículo Inteiro Exclusivo";
+            } else {
+                vBackLeft.className = "seat-btn p-2.5 rounded-2xl border text-center space-y-1 bg-slate-800/80 border-slate-700 text-slate-400 light:bg-slate-200 light:border-slate-300";
+                tagBL.className = "inline-block text-[8px] font-bold bg-slate-700 text-slate-300 px-1.5 py-0.2 rounded";
+                tagBL.innerText = "Ocupado (Ana)";
+
+                if (selectedSeatsCount === 1) {
+                    vFrontRight.className = "seat-btn p-2.5 rounded-2xl border text-center space-y-1 bg-brand-500/20 border-brand-500 text-brand-400";
+                    tagFR.innerText = "Seu Assento";
+
+                    vBackRight.className = "seat-btn p-2.5 rounded-2xl border text-center space-y-1 bg-slate-900/40 border-slate-800 text-slate-500 light:bg-slate-100 light:border-slate-200";
+                    tagBR.innerText = "Livre";
+                } else if (selectedSeatsCount === 2) {
+                    vFrontRight.className = "seat-btn p-2.5 rounded-2xl border text-center space-y-1 bg-brand-500/20 border-brand-500 text-brand-400";
+                    tagFR.innerText = "Seu Assento";
+
+                    vBackRight.className = "seat-btn p-2.5 rounded-2xl border text-center space-y-1 bg-brand-500/20 border-brand-500 text-brand-400";
+                    tagBR.innerText = "Acompanhante";
+                } else {
+                    vFrontRight.className = "seat-btn p-2.5 rounded-2xl border text-center space-y-1 bg-brand-500/20 border-brand-500 text-brand-400";
+                    tagFR.innerText = "Seu Assento";
+
+                    vBackLeft.className = "seat-btn p-2.5 rounded-2xl border text-center space-y-1 bg-brand-500/20 border-brand-500 text-brand-400";
+                    tagBL.innerText = "Acompanhante 1";
+
+                    vBackRight.className = "seat-btn p-2.5 rounded-2xl border text-center space-y-1 bg-brand-500/20 border-brand-500 text-brand-400";
+                    tagBR.innerText = "Acompanhante 2";
+                }
+
+                document.getElementById('seatDiagramLegend').innerText = `${selectedSeatsCount} de 3 Assentos Selecionados`;
+            }
+
+            const baseFare = 38.00;
+            let finalFare = baseFare;
+            let perPerson = baseFare;
+
+            if (rideMode === 'exclusive') {
+                finalFare = baseFare;
+                perPerson = baseFare;
+                document.getElementById('pricingDiscountPill').innerText = "TARIFA EXCLUSIVA";
+                document.getElementById('pricingDiscountPill').className = "text-[10px] font-black text-electric-400 bg-electric-500/20 px-2 py-0.5 rounded-full border border-electric-500/30";
+            } else {
+                if (selectedSeatsCount === 1) {
+                    finalFare = 19.00;
+                    perPerson = 19.00;
+                } else if (selectedSeatsCount === 2) {
+                    finalFare = 28.00;
+                    perPerson = 14.00;
+                } else {
+                    finalFare = 33.00;
+                    perPerson = 11.00;
+                }
+                document.getElementById('pricingDiscountPill').innerText = "DESCONTO DE COMPARTILHAMENTO -50%";
+                document.getElementById('pricingDiscountPill').className = "text-[10px] font-black text-brand-400 bg-brand-500/20 px-2 py-0.5 rounded-full border border-brand-500/30";
+            }
+
+            document.getElementById('totalPriceText').innerText = `R$ ${finalFare.toFixed(2).replace('.', ',')}`;
+            document.getElementById('perPersonPriceText').innerText = `R$ ${perPerson.toFixed(2).replace('.', ',')} / pessoa`;
+        }
+
+        function updateDriverStopsUI() {
+            const list = document.getElementById('driverStopsList');
+            const badge = document.getElementById('driverOrderModeBadge');
+
+            if (rideMode === 'exclusive') {
+                badge.innerText = "MODO EXCLUSIVO";
+                badge.className = "text-[10px] font-black px-2.5 py-1 rounded-full bg-electric-500/20 text-electric-400 border border-electric-500/30";
+                list.innerHTML = `
+                    <p><i class="fa-solid fa-1 text-electric-400 mr-2"></i> Embarque Principal (${LOCATION_POINTS.origin.name.split('(')[0]})</p>
+                    <p><i class="fa-solid fa-2 text-rose-400 mr-2"></i> Desembarque Direto (${LOCATION_POINTS.destination.name.split('(')[0]})</p>
+                `;
+            } else {
+                badge.innerText = `COMPARTILHADO (${selectedSeatsCount} ASSENTOS)`;
+                badge.className = "text-[10px] font-black px-2.5 py-1 rounded-full bg-brand-500/20 text-brand-400 border border-brand-500/30";
+                list.innerHTML = `
+                    <p><i class="fa-solid fa-1 text-brand-400 mr-2"></i> Seu Embarque (${LOCATION_POINTS.origin.name.split('(')[0]})</p>
+                    <p><i class="fa-solid fa-2 text-slate-400 mr-2"></i> Parada 1: Embarque Co-passageiro Ana</p>
+                    <p><i class="fa-solid fa-3 text-slate-400 mr-2"></i> Parada 2: Desembarque Co-passageiro Ana</p>
+                    <p><i class="fa-solid fa-4 text-rose-400 mr-2"></i> Seu Desembarque Final (${LOCATION_POINTS.destination.name.split('(')[0]})</p>
+                `;
+            }
+        }
+
+        function requestRideAction() {
+            showToast("Solicitação enviada ao motorista!");
+            switchRole('driver');
+        }
+
+        function toggleTripSimulation() {
+            if (isSimulationRunning) {
+                cancelAnimationFrame(animFrameId);
+                isSimulationRunning = false;
+                currentWaypointIndex = 0;
+                document.getElementById('btnDriverStart').innerHTML = `<i class="fa-solid fa-play"></i> <span>Iniciar Trajeto da Corrida</span>`;
+                showToast("Simulação reiniciada.");
+                renderMapLayers();
+            } else {
+                isSimulationRunning = true;
+                currentWaypointIndex = 0;
+                document.getElementById('btnDriverStart').innerHTML = `<i class="fa-solid fa-square"></i> <span>Interromper Trajeto</span>`;
+                showToast("Trajeto iniciado!");
+                animateVehicleStep();
+            }
+        }
+
+        function animateVehicleStep() {
+            if (!isSimulationRunning) return;
+
+            if (currentWaypointIndex < activeWaypoints.length) {
+                const wp = activeWaypoints[currentWaypointIndex];
+                carMarker.setLatLng([wp.lat, wp.lng]);
+
+                if (wp.stopEvent && wp.stopEvent.type === 'stop') {
+                    showToast(`Parada Realizada: ${wp.stopEvent.label}`);
+                }
+
+                currentWaypointIndex += simSpeed;
+                animFrameId = requestAnimationFrame(animateVehicleStep);
+            } else {
+                isSimulationRunning = false;
+                SoundFX.playChime('finish');
+                document.getElementById('btnDriverStart').innerHTML = `<i class="fa-solid fa-play"></i> <span>Iniciar Trajeto da Corrida</span>`;
+                openReceiptModal();
+            }
+        }
+
+        function setSimulationSpeed(speed) {
+            simSpeed = speed;
+            document.querySelectorAll('.speed-pill').forEach(btn => {
+                btn.classList.remove('bg-electric-600', 'text-white');
+                btn.classList.add('bg-slate-800', 'text-slate-300', 'light:bg-slate-200', 'light:text-slate-700');
+            });
+            event.target.classList.add('bg-electric-600', 'text-white');
+            showToast(`Velocidade alterada para ${speed}x`);
+        }
+
+        function switchRole(role) {
+            currentRole = role;
+            const btnPass = document.getElementById('btnRolePassenger');
+            const btnDrive = document.getElementById('btnRoleDriver');
+            const passPanel = document.getElementById('passengerPanel');
+            const drivePanel = document.getElementById('driverPanel');
+
+            if (role === 'passenger') {
+                btnPass.className = "px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center space-x-1.5 bg-electric-600 text-white shadow-md";
+                btnDrive.className = "px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center space-x-1.5 text-slate-400 hover:text-white light:text-slate-600";
+                passPanel.classList.remove('hidden');
+                drivePanel.classList.add('hidden');
+            } else {
+                btnDrive.className = "px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center space-x-1.5 bg-electric-600 text-white shadow-md";
+                btnPass.className = "px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center space-x-1.5 text-slate-400 hover:text-white light:text-slate-600";
+                drivePanel.classList.remove('hidden');
+                passPanel.classList.add('hidden');
+            }
+        }
+
+        function openChatModal() {
+            document.getElementById('chatModal').classList.remove('hidden');
+            renderChatStream();
+        }
+
+        function closeChatModal() {
+            document.getElementById('chatModal').classList.add('hidden');
+        }
+
+        function renderChatStream() {
+            const stream = document.getElementById('chatMessagesStream');
+            stream.innerHTML = chatMessages.map(msg => `
+                <div class="p-2.5 rounded-2xl bg-slate-800 text-xs text-slate-200 space-y-0.5 light:bg-slate-200 light:text-slate-800">
+                    <p class="text-[10px] font-bold text-electric-400">${msg.sender}</p>
+                    <p>${msg.text}</p>
+                </div>
+            `).join('');
+            stream.scrollTop = stream.scrollHeight;
+        }
+
+        function sendChatMessage(e) {
+            e.preventDefault();
+            const input = document.getElementById('chatInput');
+            if (!input.value.trim()) return;
+
+            chatMessages.push({ sender: 'Você', text: input.value });
+            input.value = '';
+            renderChatStream();
+        }
+
+        function openReceiptModal() {
+            document.getElementById('recModeText').innerText = rideMode === 'exclusive' ? 'Exclusivo (Privado)' : 'Compartilhado (Ride Share)';
+            document.getElementById('recSeatsText').innerText = `${selectedSeatsCount} Assento(s)`;
+            
+            const totalText = document.getElementById('totalPriceText').innerText;
+            document.getElementById('recTotalText').innerText = totalText;
+            document.getElementById('recDiscountText').innerText = rideMode === 'shared' ? 'R$ 19,00 (-50%)' : 'R$ 0,00';
+
+            document.getElementById('receiptModal').classList.remove('hidden');
+        }
+
+        function saveAndCloseReceipt() {
+            const tripItem = {
+                id: Date.now(),
+                date: new Date().toLocaleDateString('pt-BR'),
+                mode: rideMode === 'exclusive' ? 'Exclusivo' : 'Compartilhado',
+                seats: selectedSeatsCount,
+                price: document.getElementById('recTotalText').innerText
+            };
+
+            const history = JSON.parse(localStorage.getItem('shareride_pro_history') || '[]');
+            history.unshift(tripItem);
+            localStorage.setItem('shareride_pro_history', JSON.stringify(history));
+
+            updateHistoryBadge();
+            document.getElementById('receiptModal').classList.add('hidden');
+            showToast("Corrida salva no seu histórico!");
+        }
+
+        function updateHistoryBadge() {
+            const history = JSON.parse(localStorage.getItem('shareride_pro_history') || '[]');
+            const badge = document.getElementById('historyBadge');
+            if (history.length > 0) {
+                badge.classList.remove('hidden');
+                badge.innerText = history.length;
+            }
+        }
+
+        function openHistoryModal() {
+            const history = JSON.parse(localStorage.getItem('shareride_pro_history') || '[]');
+            const container = document.getElementById('historyItemsContainer');
+
+            if (history.length === 0) {
+                container.innerHTML = `<p class="text-xs text-slate-400 text-center py-6">Nenhuma corrida salva.</p>`;
+            } else {
+                container.innerHTML = history.map(item => `
+                    <div class="p-3 rounded-2xl bg-slate-950 border border-slate-800 text-xs space-y-1 light:bg-slate-100 light:border-slate-200">
+                        <div class="flex justify-between font-bold text-white light:text-slate-900">
+                            <span>${item.date} • ${item.mode} (${item.seats} assentos)</span>
+                            <span class="text-brand-400">${item.price}</span>
+                        </div>
+                    </div>
+                `).join('');
+            }
+            document.getElementById('historyModal').classList.remove('hidden');
+        }
+
+        function closeHistoryModal() {
+            document.getElementById('historyModal').classList.add('hidden');
+        }
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const themeIcon = document.getElementById('themeIcon');
+            if (html.classList.contains('dark')) {
+                html.classList.remove('dark');
+                html.classList.add('light');
+                themeIcon.className = "fa-solid fa-sun text-sm";
+            } else {
+                html.classList.remove('light');
+                html.classList.add('dark');
+                themeIcon.className = "fa-solid fa-moon text-sm";
+            }
+        }
+
+        function showToast(msg) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = "px-4 py-2.5 rounded-2xl bg-slate-900/95 text-slate-100 text-xs font-bold border border-slate-700 shadow-2xl backdrop-blur-md transition-all duration-300 transform translate-y-2 opacity-0 flex items-center space-x-2 light:bg-white light:text-slate-800 light:border-slate-300";
+            toast.innerHTML = `<i class="fa-solid fa-circle-info text-electric-400"></i> <span>${msg}</span>`;
+
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.remove('translate-y-2', 'opacity-0'), 50);
+            setTimeout(() => {
+                toast.classList.add('opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 2800);
+        }
+    </script>
+</body>
+</html>
